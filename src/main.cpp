@@ -78,9 +78,9 @@ namespace
 
 int main()
 {
-  static const int latencyMs = 0;
   static const int numSteps = 10;
-  static const  double deltaT = 1.0;
+  static const double deltaT = 1.0;
+  static const double latency = 0.1;
   uWS::Hub h;
   MPC mpc(numSteps, deltaT);
 
@@ -128,7 +128,7 @@ int main()
           // Sample waypoints from reference polynom for display
           std::vector<double> refWaypointsX;
           std::vector<double> refWaypointsY;
-          for (int x = 0; x < numSteps; x += deltaT)
+          for (int x = 0; x < 25; x += deltaT)
           {
             refWaypointsX.push_back(x);
             refWaypointsY.push_back(polyEval(refCoeffs, x));
@@ -149,7 +149,7 @@ int main()
           std::vector<Eigen::VectorXd> actuations;
           if (mpc.Solve(state, refCoeffs, actuations))
           {
-            Eigen::VectorXd actuation = actuations[1];
+            Eigen::VectorXd actuation = actuations.front();
             msgJson["steering_angle"] = actuation(6);
             msgJson["throttle"] = actuation(7);
 
@@ -183,7 +183,7 @@ int main()
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          //std::this_thread::sleep_for(std::chrono::milliseconds(latencyMs));
+          //std::this_thread::sleep_for(std::chrono::milliseconds(int(latency * 1000)));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
           //std::cout << msg << std::endl;
         }

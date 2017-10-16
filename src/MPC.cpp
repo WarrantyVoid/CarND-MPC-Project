@@ -110,8 +110,8 @@ public:
       {
         f0 += mCoeffs(d) * CppAD::pow(x0, d);
       }
-      AD<double> psides0(0);
-      for (int d = 0; d < mCoeffs.size(); ++d)
+      AD<double> psides0(0.0);
+      for (int d = 1; d < mCoeffs.size(); ++d)
       {
         psides0 += d * mCoeffs(d) * CppAD::pow(x0, d - 1);
       }
@@ -186,12 +186,12 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   {
     vars[i] = 0;
   }
-  vars[mIdx.x] = state[0];
-  vars[mIdx.y] = state[1];
-  vars[mIdx.psi] = state[2];
-  vars[mIdx.v] = state[3];
-  vars[mIdx.cte] = state[4];
-  vars[mIdx.epsi] = state[5];
+  vars[mIdx.x] = state(0);
+  vars[mIdx.y] = state(1);
+  vars[mIdx.psi] = state(2);
+  vars[mIdx.v] = state(3);
+  vars[mIdx.cte] = state(4);
+  vars[mIdx.epsi] = state(5);
   std::cout << "[Solve] x=" << vars[mIdx.x] << " y=" << vars[mIdx.y] << " psi=" << vars[mIdx.psi]
             << " v=" << vars[mIdx.v] << " cte=" << vars[mIdx.cte] << " epsi=" << vars[mIdx.epsi] << std::endl;
 
@@ -263,14 +263,14 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
         constraintsLowBound, constraintsUppBound,
         fgEval, solution);
 
-  // Cost
-  auto cost = solution.obj_value;
-  std::cout << "Cost " << cost << std::endl;
-
   actuations.clear();
   if (solution.status == CppAD::ipopt::solve_result<Dvector>::success)
   {
-    // Return actuation result
+    // Cost
+    auto cost = solution.obj_value;
+    std::cout << "Cost " << cost << std::endl;
+
+    // Set actuation result
     for(int t = 0; t < mIdx.N; ++t)
     {
       Eigen::VectorXd actuation(8);
