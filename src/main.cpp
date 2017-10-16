@@ -4,6 +4,7 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <list>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
@@ -76,21 +77,71 @@ namespace
 //=================================================================================
 
 
+class TimeTracker
+{
+ public:
+
+  TimeTracker(unsigned N)
+    : mN(N)
+    , mBeginPoint(std::chrono::high_resolution_clock::now())
+    , mMeasurements()
+  {
+
+  }
+
+  void begin()
+  {
+    mBeginPoint = std::chrono::high_resolution_clock::now();
+  }
+
+  void end()
+  {
+    std::chrono::time_point<std::chrono::system_clock> endPoint= std::chrono::high_resolution_clock::now();
+    unsigned elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endPoint - mBeginPoint).count();
+    mMeasurements.push_back(elapsed);
+    if (mMeasurements.size() > mN)
+    {
+      mMeasurements.pop_front();
+    }
+  }
+
+  double getAvgElapsedMs() const
+  {
+    int n = mMeasurements.size();
+    if (n == 0)
+    {
+      return 0;
+    }
+    else
+    {
+      return std::accumulate(mMeasurements.begin(), mMeasurements.end(), 0.0) / 1000.0 / n;
+    }
+  }
+
+private:
+  unsigned mN;
+  std::chrono::time_point<std::chrono::system_clock> mBeginPoint;
+  std::list<unsigned> mMeasurements;
+};
+
+//=================================================================================
+
+
 int main()
 {
-  static const int numSteps = 10;
-  static const double deltaT = 1.0;
-  static const double latency = 0.1;
+  static const int targetSpeed = 40;
+  static int count = 0;
   uWS::Hub h;
-  MPC mpc(numSteps, deltaT);
+  TimeTracker tracker(10);
+  MPCParams params(targetSpeed, 2.67, 10, 4.0 / targetSpeed);
+  MPC mpc(params);
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
+  h.onMessage([&tracker, &params, &mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
   {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     std::string sdata = std::string(data).substr(0, length);
-    //std::cout << sdata << std::endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2')
     {
       std::string s = hasData(sdata);
@@ -101,12 +152,19 @@ int main()
         if (event == "telemetry")
         {
           json msgJson;
+          tracker.begin();
+          ++count;
+          std::cout << "count=" << count << std::endl;
 
           // Fetch car state from msg
           double x = j[1]["x"];
           double y = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double steer = j[1]["steering_angle"];
+          double throttle = j[1]["throttle"];
+          std::cout <<  "x=" << x << " y=" << y << " psi=" << psi
+                    << " v=" << v << " steer=" << steer << " throttle=" << throttle << std::endl;
 
           // Fetch planned path from message
           std::vector<double> px = j[1]["ptsx"];
@@ -116,11 +174,14 @@ int main()
           assert(px.size() == py.size());
           Eigen::VectorXd refXPlanned(px.size());
           Eigen::VectorXd refYPlanned(py.size());
+          std::cout << "ref=";
           for (int i = 0; i < static_cast<int>(px.size()); ++i)
           {
             refXPlanned[i] = cos(-psi) * (px[i] - x) - sin(-psi) * (py[i] - y);
             refYPlanned[i] = sin(-psi) * (px[i] - x) + cos(-psi) * (py[i] - y);
+            std::cout << "(" << refXPlanned[i] << ", " << refYPlanned[i] << ") ";
           }
+          std::cout << std::endl;
 
           // Match 3rd order polynom
           Eigen::VectorXd refCoeffs = polyFit(refXPlanned, refYPlanned, 3);
@@ -136,14 +197,23 @@ int main()
           msgJson["next_x"] = refWaypointsX;
           msgJson["next_y"] = refWaypointsY;
 
-          // Car state in car coord system with error errors
+          // Final car state with latency and errors
+          double latency = tracker.getAvgElapsedMs();
+          double dX = v * latency;
+          double dPsi = v * -steer / params.Lf * latency;
+          double dV = throttle * latency;
+          double cte = -polyEval(refCoeffs, dX);
+          double epsi = -atan(refCoeffs[1]) - dPsi;
+          std::cout <<  "l=" << latency << " dx=" << dX << " dPsi=" << dPsi
+                    << " dV=" << dV << " cte=" << cte << " epsi=" << epsi << std::endl;
+          std::cout << "===================================================================" << std::endl;
           Eigen::VectorXd state(6);
-          state << 0.0
+          state << dX
                  , 0.0
-                 , 0.0
-                 , v
-                 , polyEval(refCoeffs, 0.0)
-                 , -atan(refCoeffs[1]);
+                 , dPsi
+                 , v + dV
+                 , cte
+                 , epsi;
 
           // Calculate actuations using mpc
           std::vector<Eigen::VectorXd> actuations;
@@ -167,25 +237,21 @@ int main()
           else
           {
             msgJson["steering_angle"] = 0.0;
-            msgJson["throttle"] = 0.2;
+            msgJson["throttle"] = 0.1;
             msgJson["mpc_x"] = refWaypointsX;
             msgJson["mpc_y"] = refWaypointsY;
           }
 
 
-          auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
-          //
-          // Feel free to play around with this value but should be to drive
-          // around the track with 100ms latency.
-          //
-          // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
-          // SUBMITTING.
-          //std::this_thread::sleep_for(std::chrono::milliseconds(int(latency * 1000)));
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          tracker.end();
+
+          auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-          //std::cout << msg << std::endl;
+
         }
       }
       else

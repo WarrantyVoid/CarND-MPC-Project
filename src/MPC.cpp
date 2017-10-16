@@ -5,27 +5,6 @@
 
 using CppAD::AD;
 
-namespace
-{
-  constexpr double pi()
-  {
-    return M_PI;
-  }
-
-  double deg2rad(double x)
-  {
-    return x * pi() / 180;
-  }
-
-  double rad2deg(double x)
-  {
-    return x * 180 / pi();
-  }
-}
-
-
-//=================================================================================
-
 
 class FGEval
 {
@@ -37,8 +16,8 @@ public:
    * @brief FGEval contructor.
    * @param coeffs Fitted polynomial coefficients
    */
-  FGEval(const CPPADIndices &idx, Eigen::VectorXd coeffs)
-    : mIdx(idx)
+  FGEval(const MPCParams &params, Eigen::VectorXd coeffs)
+    : mP(params)
     , mCoeffs(coeffs)
   {
 
@@ -55,55 +34,55 @@ public:
     fg[0] = 0;
 
     // The part of the cost based on the reference state.
-    for (int t = 0; t < mIdx.N; ++t)
+    for (int t = 0; t < mP.N; ++t)
     {
-      fg[0] += CppAD::pow(vars[mIdx.cte + t], 2);
-      fg[0] += CppAD::pow(vars[mIdx.epsi + t], 2);
-      fg[0] += CppAD::pow(vars[mIdx.v + t] - CPPADIndices::REF_V, 2);
+      fg[0] += CppAD::pow(vars[mP.cte + t], 2);
+      fg[0] += CppAD::pow(vars[mP.epsi + t], 2);
+      fg[0] += CppAD::pow(vars[mP.v + t] - mP.refV, 2);
     }
 
     // Minimize the use of actuators.
-    for (int t = 0; t < mIdx.N - 1; ++t)
+    for (int t = 0; t < mP.N - 1; ++t)
     {
-      fg[0] += CppAD::pow(vars[mIdx.steer + t], 2);
-      fg[0] += CppAD::pow(vars[mIdx.throttle + t], 2);
+      fg[0] += CppAD::pow(vars[mP.steer + t], 2);
+      fg[0] += CppAD::pow(vars[mP.throttle + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
-    for (int t = 1; t < mIdx.N - 1; ++t)
+    for (int t = 1; t < mP.N - 1; ++t)
     {
-      fg[0] += CppAD::pow(vars[mIdx.steer + t] - vars[mIdx.steer + t - 1], 2);
-      fg[0] += CppAD::pow(vars[mIdx.throttle + t] - vars[mIdx.throttle + t - 1], 2);
+      fg[0] += CppAD::pow(vars[mP.steer + t] - vars[mP.steer + t - 1], 2);
+      fg[0] += CppAD::pow(vars[mP.throttle + t] - vars[mP.throttle + t - 1], 2);
     }
 
     // Initial constraints
-    fg[mIdx.x + 1] = vars[mIdx.x];
-    fg[mIdx.y + 1] = vars[mIdx.y];
-    fg[mIdx.psi + 1] = vars[mIdx.psi];
-    fg[mIdx.v + 1] = vars[mIdx.v];
-    fg[mIdx.cte + 1] = vars[mIdx.cte];
-    fg[mIdx.epsi + 1] = vars[mIdx.epsi];
-    std::cout << "[Init] x=" << fg[mIdx.x + 1] << " y=" << fg[mIdx.y + 1] << " psi=" << fg[mIdx.psi + 1]
-              << " v=" << fg[mIdx.v + 1] << " cte=" << fg[mIdx.cte + 1] << " epsi=" << fg[mIdx.epsi + 1] << std::endl;
+    fg[mP.x + 1] = vars[mP.x];
+    fg[mP.y + 1] = vars[mP.y];
+    fg[mP.psi + 1] = vars[mP.psi];
+    fg[mP.v + 1] = vars[mP.v];
+    fg[mP.cte + 1] = vars[mP.cte];
+    fg[mP.epsi + 1] = vars[mP.epsi];
+    //std::cout << "[Init] x=" << fg[mP.x + 1] << " y=" << fg[mP.y + 1] << " psi=" << fg[mP.psi + 1]
+    //          << " v=" << fg[mP.v + 1] << " cte=" << fg[mP.cte + 1] << " epsi=" << fg[mP.epsi + 1] << std::endl;
 
     // The rest of the constraints
-    for (int t = 1; t < mIdx.N; ++t)
+    for (int t = 1; t < mP.N; ++t)
     {
-      AD<double> x0 = vars[mIdx.x + t - 1];
-      AD<double> y0 = vars[mIdx.y + t - 1];
-      AD<double> psi0 = vars[mIdx.psi + t - 1];
-      AD<double> v0 = vars[mIdx.v + t - 1];
-      AD<double> cte0 = vars[mIdx.cte + t - 1];
-      AD<double> epsi0 = vars[mIdx.epsi + t - 1];
-      AD<double> steer = vars[mIdx.steer + t - 1];
-      AD<double> throttle = vars[mIdx.throttle + t - 1];
+      AD<double> x0 = vars[mP.x + t - 1];
+      AD<double> y0 = vars[mP.y + t - 1];
+      AD<double> psi0 = vars[mP.psi + t - 1];
+      AD<double> v0 = vars[mP.v + t - 1];
+      AD<double> cte0 = vars[mP.cte + t - 1];
+      AD<double> epsi0 = vars[mP.epsi + t - 1];
+      AD<double> steer = vars[mP.steer + t - 1];
+      AD<double> throttle = vars[mP.throttle + t - 1];
 
-      AD<double> x1 = vars[mIdx.x + t];
-      AD<double> y1 = vars[mIdx.y + t];
-      AD<double> psi1 = vars[mIdx.psi + t];
-      AD<double> v1 = vars[mIdx.v + t];
-      AD<double> cte1 = vars[mIdx.cte + t];
-      AD<double> epsi1 = vars[mIdx.epsi + t];
+      AD<double> x1 = vars[mP.x + t];
+      AD<double> y1 = vars[mP.y + t];
+      AD<double> psi1 = vars[mP.psi + t];
+      AD<double> v1 = vars[mP.v + t];
+      AD<double> cte1 = vars[mP.cte + t];
+      AD<double> epsi1 = vars[mP.epsi + t];
 
       AD<double> f0(0.0);
       for (int d = 0; d < mCoeffs.size(); ++d)
@@ -117,21 +96,21 @@ public:
       }
       psides0 = CppAD::atan(psides0);
 
-      fg[mIdx.x + t + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * mIdx.deltaT);
-      fg[mIdx.y + t + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * mIdx.deltaT);
-      fg[mIdx.psi + t + 1] = psi1 - (psi0 + v0 * steer / CPPADIndices::LF * mIdx.deltaT);
-      fg[mIdx.v + t + 1] = v1 - (v0 + throttle * mIdx.deltaT);
-      fg[mIdx.cte + t + 1] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * mIdx.deltaT));
-      fg[mIdx.epsi + t + 1] = epsi1 - ((psi0 - psides0) + v0 * steer / CPPADIndices::LF * mIdx.deltaT);
+      fg[mP.x + t + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * mP.deltaT);
+      fg[mP.y + t + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * mP.deltaT);
+      fg[mP.psi + t + 1] = psi1 - (psi0 + v0 * steer / mP.Lf * mP.deltaT);
+      fg[mP.v + t + 1] = v1 - (v0 + throttle * mP.deltaT);
+      fg[mP.cte + t + 1] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * mP.deltaT));
+      fg[mP.epsi + t + 1] = epsi1 - ((psi0 - psides0) + v0 * steer / mP.Lf * mP.deltaT);
 
-      std::cout << "x=" << fg[mIdx.x + t + 1] << " y=" << fg[mIdx.y + t + 1] << " psi=" << fg[mIdx.psi + t + 1]
-                << " v=" << fg[mIdx.v + t + 1] << " cte=" << fg[mIdx.cte + t + 1] << " epsi=" << fg[mIdx.epsi + t + 1] << std::endl;
+      //std::cout << "x=" << fg[mP.x + t + 1] << " y=" << fg[mP.y + t + 1] << " psi=" << fg[mP.psi + t + 1]
+      //          << " v=" << fg[mP.v + t + 1] << " cte=" << fg[mP.cte + t + 1] << " epsi=" << fg[mP.epsi + t + 1] << std::endl;
     }
   }
 
 private:
   /** Helper indices */
-  CPPADIndices mIdx;
+  const MPCParams mP;
 
   /** Fitted polynomial coefficients */
   Eigen::VectorXd mCoeffs;
@@ -141,11 +120,10 @@ private:
 //=================================================================================
 
 
-const double CPPADIndices::LF = 2.67;
-const double CPPADIndices::REF_V = 40;
-
-CPPADIndices::CPPADIndices(int N, double deltaT)
+MPCParams::MPCParams(double refV, double Lf, int N, double deltaT)
 {
+  this->refV = refV;
+  this->Lf = Lf;
   this->N = N;
   this->deltaT = deltaT;
 
@@ -161,8 +139,8 @@ CPPADIndices::CPPADIndices(int N, double deltaT)
 }
 
 
-MPC::MPC(int N, double deltaT)
-: mIdx(N, deltaT)
+MPC::MPC(const MPCParams &params)
+: mP(params)
 {
 
 }
@@ -177,8 +155,8 @@ MPC::~MPC()
 bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen::VectorXd> &actuations)
 {
   typedef CPPAD_TESTVECTOR(double) Dvector;
-  const int nVars = state.size() * mIdx.N  + 2 * (mIdx.N - 1);
-  const int nConstraints = state.size() * mIdx.N;
+  const int nVars = state.size() * mP.N  + 2 * (mP.N - 1);
+  const int nConstraints = state.size() * mP.N;
 
   // Values for variables
   Dvector vars(nVars);
@@ -186,29 +164,27 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   {
     vars[i] = 0;
   }
-  vars[mIdx.x] = state(0);
-  vars[mIdx.y] = state(1);
-  vars[mIdx.psi] = state(2);
-  vars[mIdx.v] = state(3);
-  vars[mIdx.cte] = state(4);
-  vars[mIdx.epsi] = state(5);
-  std::cout << "[Solve] x=" << vars[mIdx.x] << " y=" << vars[mIdx.y] << " psi=" << vars[mIdx.psi]
-            << " v=" << vars[mIdx.v] << " cte=" << vars[mIdx.cte] << " epsi=" << vars[mIdx.epsi] << std::endl;
+  vars[mP.x] = state(0);
+  vars[mP.y] = state(1);
+  vars[mP.psi] = state(2);
+  vars[mP.v] = state(3);
+  vars[mP.cte] = state(4);
+  vars[mP.epsi] = state(5);
 
   // Lower and upper limits for variables
   Dvector varsLowBound(nVars);
   Dvector varsUppBound(nVars);
-  for (int i = 0; i < mIdx.steer; ++i)
+  for (int i = 0; i < mP.steer; ++i)
   {
-    varsLowBound[i] = std::numeric_limits<double>::min();
+    varsLowBound[i] = std::numeric_limits<double>::lowest();
     varsUppBound[i] = std::numeric_limits<double>::max();
   }
-  for (int i = mIdx.steer; i < mIdx.throttle; ++i)
+  for (int i = mP.steer; i < mP.throttle; ++i)
   {
     varsLowBound[i] = deg2rad(-25.0);
     varsUppBound[i] = deg2rad(25.0);
   }
-  for (int i = mIdx.throttle; i < nVars; ++i)
+  for (int i = mP.throttle; i < nVars; ++i)
   {
     varsLowBound[i] = -1.0;
     varsUppBound[i] = 1.0;
@@ -222,21 +198,21 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
     constraintsLowBound[i] = 0;
     constraintsUppBound[i] = 0;
   }
-  constraintsLowBound[mIdx.x] = state[0];
-  constraintsUppBound[mIdx.x] = state[0];
-  constraintsLowBound[mIdx.y] = state[1];
-  constraintsUppBound[mIdx.y] = state[1];
-  constraintsLowBound[mIdx.psi] = state[2];
-  constraintsUppBound[mIdx.psi] = state[2];
-  constraintsLowBound[mIdx.v] = state[3];
-  constraintsUppBound[mIdx.v] = state[3];
-  constraintsLowBound[mIdx.cte] = state[4];
-  constraintsUppBound[mIdx.cte] = state[4];
-  constraintsLowBound[mIdx.epsi] = state[5];
-  constraintsUppBound[mIdx.epsi] = state[5];
+  constraintsLowBound[mP.x] = state[0];
+  constraintsUppBound[mP.x] = state[0];
+  constraintsLowBound[mP.y] = state[1];
+  constraintsUppBound[mP.y] = state[1];
+  constraintsLowBound[mP.psi] = state[2];
+  constraintsUppBound[mP.psi] = state[2];
+  constraintsLowBound[mP.v] = state[3];
+  constraintsUppBound[mP.v] = state[3];
+  constraintsLowBound[mP.cte] = state[4];
+  constraintsUppBound[mP.cte] = state[4];
+  constraintsLowBound[mP.epsi] = state[5];
+  constraintsUppBound[mP.epsi] = state[5];
 
   // object that computes objective and constraints
-  FGEval fgEval(mIdx, coeffs);
+  FGEval fgEval(mP, coeffs);
 
   // options for IPOPT solver
   std::string options;
@@ -271,19 +247,23 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
     std::cout << "Cost " << cost << std::endl;
 
     // Set actuation result
-    for(int t = 0; t < mIdx.N; ++t)
+    for(int t = 0; t < mP.N; ++t)
     {
       Eigen::VectorXd actuation(8);
-      actuation << solution.x[mIdx.x + t]
-                 , solution.x[mIdx.y + t]
-                 , solution.x[mIdx.psi + t]
-                 , solution.x[mIdx.v + t]
-                 , solution.x[mIdx.cte + t]
-                 , solution.x[mIdx.epsi + t]
-                 , (t < mIdx.N - 1) ? rad2deg(solution.x[mIdx.steer + t]) / 25.0 : 0.0
-                 , (t < mIdx.N - 1) ? solution.x[mIdx.throttle + t] : 0.0;
+      actuation << solution.x[mP.x + t]
+                 , solution.x[mP.y + t]
+                 , solution.x[mP.psi + t]
+                 , solution.x[mP.v + t]
+                 , solution.x[mP.cte + t]
+                 , solution.x[mP.epsi + t]
+                 , (t < mP.N - 1) ? rad2deg(solution.x[mP.steer + t]) / 25.0 : 0.0
+                 , (t < mP.N - 1) ? solution.x[mP.throttle + t] : 0.0;
       actuations.push_back(actuation);
     }
+  }
+  else
+  {
+    std::cout << "Error." << std::endl;
   }
   return solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 }

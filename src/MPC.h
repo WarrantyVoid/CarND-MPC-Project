@@ -5,19 +5,42 @@
 #include "Eigen-3.3/Eigen/Core"
 
 
+static constexpr double pi()
+{
+  return M_PI;
+}
+
+static double deg2rad(double x)
+{
+  return x * pi() / 180;
+}
+
+static double rad2deg(double x)
+{
+  return x * 180 / pi();
+}
+
+
 /**
  * @brief Structure containing helper indices.
  */
-struct CPPADIndices
+struct MPCParams
 {
-  CPPADIndices(int N, double deltaT);
+  MPCParams(double refV, double Lf, int N, double deltaT);
 
   /** The number of states to evaluate */
   int N;
 
   /** Delta time between two successive actuations */
-  int deltaT;
+  double deltaT;
 
+  /** Length from front to center of gravity */
+  double Lf;
+
+  /** Reference speed not to cause costs */
+  double refV;
+
+  // Helper indices
   int x;
   int y;
   int psi;
@@ -26,12 +49,6 @@ struct CPPADIndices
   int epsi;
   int steer;
   int throttle;
-
-  /** Length from front to center of gravity */
-  static const double LF;
-
-  /** Reference speed not to cause costs */
-  static const double REF_V;
 };
 
 
@@ -40,7 +57,7 @@ class MPC
 
 public:
 
-  MPC(int N, double deltaT);
+  MPC(const MPCParams &params);
 
   virtual ~MPC();
 
@@ -57,8 +74,8 @@ public:
 
 private:
 
-  /** Helper indices */
-  CPPADIndices mIdx;
+  /** Parametrization */
+  const MPCParams mP;
 };
 
 #endif /* MPC_H */
