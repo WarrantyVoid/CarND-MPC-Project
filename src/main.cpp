@@ -128,10 +128,10 @@ int main()
           // Sample waypoints from reference polynom for display
           std::vector<double> refWaypointsX;
           std::vector<double> refWaypointsY;
-          for (int x = 0; x < 25; x += deltaT)
+          for (int i = 0; i < 125; i += 5)
           {
-            refWaypointsX.push_back(x);
-            refWaypointsY.push_back(polyEval(refCoeffs, x));
+            refWaypointsX.push_back(i);
+            refWaypointsY.push_back(polyEval(refCoeffs, i));
           }
           msgJson["next_x"] = refWaypointsX;
           msgJson["next_y"] = refWaypointsY;
@@ -150,7 +150,7 @@ int main()
           if (mpc.Solve(state, refCoeffs, actuations))
           {
             Eigen::VectorXd actuation = actuations.front();
-            msgJson["steering_angle"] = actuation(6);
+            msgJson["steering_angle"] = -actuation(6);
             msgJson["throttle"] = actuation(7);
 
             //Display the MPC predicted trajectory
