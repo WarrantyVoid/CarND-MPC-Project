@@ -88,7 +88,7 @@ int main()
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     std::string sdata = std::string(data).substr(0, length);
-    std::cout << sdata << std::endl;
+    //std::cout << sdata << std::endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2')
     {
       std::string s = hasData(sdata);
@@ -101,13 +101,10 @@ int main()
           json msgJson;
 
           // Fetch car state from msg
-          Eigen::VectorXd state(6);
-          state << j[1]["x"]
-                 , j[1]["y"]
-                 , j[1]["psi"]
-                 , j[1]["speed"]
-                 , 0.0
-                 , 0.0;
+          double x = j[1]["x"];
+          double y = j[1]["y"];
+          double psi = j[1]["psi"];
+          double v = j[1]["speed"];
 
           // Fetch planned path from message
           std::vector<double> px = j[1]["ptsx"];
@@ -119,8 +116,8 @@ int main()
           Eigen::VectorXd refYPlanned(py.size());
           for (int i = 0; i < static_cast<int>(px.size()); ++i)
           {
-            refXPlanned[i] = cos(-state[2]) * (px[i] - state[0]) - sin(-state[2]) * (py[i] - state[1]);
-            refYPlanned[i] = sin(-state[2]) * (px[i] - state[0]) + cos(-state[2]) * (py[i] - state[1]);
+            refXPlanned[i] = cos(-psi) * (px[i] - x) - sin(-psi) * (py[i] - y);
+            refYPlanned[i] = sin(-psi) * (px[i] - x) + cos(-psi) * (py[i] - y);
           }
 
           // Match 3rd order polynom
@@ -137,13 +134,18 @@ int main()
           msgJson["next_x"] = refWaypointsX;
           msgJson["next_y"] = refWaypointsY;
 
-          // Add errors to state
-          state(4) = -polyEval(refCoeffs, 0);
-          state(5) = 0.0;
+          // Car state in car coord system with error errors
+          Eigen::VectorXd state(6);
+          state << 0.0
+                 , 0.0
+                 , 0.0
+                 , v
+                 , polyEval(refCoeffs, 0.0)
+                 , atan(refCoeffs[1]);
 
           // Calculate actuations using mpc
           std::vector<Eigen::VectorXd> actuations(2);
-          /*if (mpc.Solve(state, refCoeffs, actuations))
+          if (mpc.Solve(state, refCoeffs, actuations))
           {
             Eigen::VectorXd actuation = actuations[1];
             msgJson["steering_angle"] = actuation(6);
@@ -160,7 +162,7 @@ int main()
               msgJson["mpc_y"] = mpcWaypointsX;
             }
           }
-          else*/
+          else
           {
             msgJson["steering_angle"] = 0.0;
             msgJson["throttle"] = 0.4;
@@ -181,7 +183,7 @@ int main()
           // SUBMITTING.
           //std::this_thread::sleep_for(std::chrono::milliseconds(latencyMs));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
         }
       }
       else

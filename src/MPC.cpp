@@ -83,6 +83,8 @@ public:
     fg[mIdx.v + 1] = vars[mIdx.v];
     fg[mIdx.cte + 1] = vars[mIdx.cte];
     fg[mIdx.epsi + 1] = vars[mIdx.epsi];
+    std::cout << "[Init] x=" << fg[mIdx.x + 1] << " y=" << fg[mIdx.y + 1] << " psi=" << fg[mIdx.psi + 1]
+              << " v=" << fg[mIdx.v + 1] << " cte=" << fg[mIdx.cte + 1] << " epsi=" << fg[mIdx.epsi + 1] << std::endl;
 
     // The rest of the constraints
     for (int t = 1; t < mIdx.N; ++t)
@@ -103,15 +105,18 @@ public:
       AD<double> cte1 = vars[mIdx.cte + t];
       AD<double> epsi1 = vars[mIdx.epsi + t];
 
-      AD<double> f0 = mCoeffs[0] + mCoeffs[1] * x0;// + mCoeffs[2] * CppAD::pow(x0, 2);
-      AD<double> psides0 = CppAD::atan(mCoeffs[1]/* + 2.0 * mCoeffs[2] * x0*/);
+      AD<double> f0 = mCoeffs[0] + mCoeffs[1] * x0 + mCoeffs[2] * CppAD::pow(x0, 2);
+      AD<double> psides0 = CppAD::atan(mCoeffs[1] + 2.0 * mCoeffs[2] * x0);
 
       fg[mIdx.x + t + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * mIdx.deltaT);
       fg[mIdx.y + t + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * mIdx.deltaT);
-      fg[mIdx.psi + t + 1] = psi1 - (psi0 + v0 * mIdx.steer / CPPADIndices::LF * mIdx.deltaT);
+      fg[mIdx.psi + t + 1] = psi1 - (psi0 + v0 * steer / CPPADIndices::LF * mIdx.deltaT);
       fg[mIdx.v + t + 1] = v1 - (v0 + throttle * mIdx.deltaT);
       fg[mIdx.cte + t + 1] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * mIdx.deltaT));
       fg[mIdx.epsi + t + 1] = epsi1 - ((psi0 - psides0) + v0 * steer / CPPADIndices::LF * mIdx.deltaT);
+
+      std::cout << "x=" << fg[mIdx.x + t + 1] << " y=" << fg[mIdx.y + t + 1] << " psi=" << fg[mIdx.psi + t + 1]
+                << " v=" << fg[mIdx.v + t + 1] << " cte=" << fg[mIdx.cte + t + 1] << " epsi=" << fg[mIdx.epsi + t + 1] << std::endl;
     }
   }
 
@@ -178,6 +183,8 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   vars[mIdx.v] = state[3];
   vars[mIdx.cte] = state[4];
   vars[mIdx.epsi] = state[5];
+  std::cout << "[Solve] x=" << vars[mIdx.x] << " y=" << vars[mIdx.y] << " psi=" << vars[mIdx.psi]
+            << " v=" << vars[mIdx.v] << " cte=" << vars[mIdx.cte] << " epsi=" << vars[mIdx.epsi] << std::endl;
 
   // Lower and upper limits for variables
   Dvector varsLowBound(nVars);
@@ -232,11 +239,11 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   // can uncomment 1 of these and see if it makes a difference or not but
   // if you uncomment both the computation time should go up in orders of
   // magnitude.
-  options += "Sparse  true        forward\n";
-  options += "Sparse  true        reverse\n";
+  //options += "Sparse  true        forward\n";
+  //options += "Sparse  true        reverse\n";
   // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
   // Change this as you see fit.
-  options += "Numeric max_cpu_time          0.5\n";
+  //options += "Numeric max_cpu_time          0.5\n";
 
   // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
