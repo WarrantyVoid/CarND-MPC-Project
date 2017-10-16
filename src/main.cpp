@@ -78,9 +78,11 @@ namespace
 
 int main()
 {
+  static const int latencyMs = 0;
+  static const int numSteps = 10;
+  static const  double deltaT = 1.0;
   uWS::Hub h;
-  MPC mpc(20, 5.0);
-  static const int latencyMs = 100;
+  MPC mpc(numSteps, deltaT);
 
   h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
   {
@@ -126,7 +128,7 @@ int main()
           // Sample waypoints from reference polynom for display
           std::vector<double> refWaypointsX;
           std::vector<double> refWaypointsY;
-          for (int x = 0; x < 100; x += 5)
+          for (int x = 0; x < numSteps; x += deltaT)
           {
             refWaypointsX.push_back(x);
             refWaypointsY.push_back(polyEval(refCoeffs, x));
@@ -141,10 +143,10 @@ int main()
                  , 0.0
                  , v
                  , polyEval(refCoeffs, 0.0)
-                 , atan(refCoeffs[1]);
+                 , -atan(refCoeffs[1]);
 
           // Calculate actuations using mpc
-          std::vector<Eigen::VectorXd> actuations(2);
+          std::vector<Eigen::VectorXd> actuations;
           if (mpc.Solve(state, refCoeffs, actuations))
           {
             Eigen::VectorXd actuation = actuations[1];
@@ -157,15 +159,15 @@ int main()
             for (int t = 0; t < actuation.size(); ++t)
             {
               mpcWaypointsX.push_back(actuations[t](0));
-               mpcWaypointsX.push_back(actuations[t](1));
+              mpcWaypointsY.push_back(actuations[t](1));
               msgJson["mpc_x"] = mpcWaypointsX;
-              msgJson["mpc_y"] = mpcWaypointsX;
+              msgJson["mpc_y"] = mpcWaypointsY;
             }
           }
           else
           {
             msgJson["steering_angle"] = 0.0;
-            msgJson["throttle"] = 0.4;
+            msgJson["throttle"] = 0.2;
             msgJson["mpc_x"] = refWaypointsX;
             msgJson["mpc_y"] = refWaypointsY;
           }

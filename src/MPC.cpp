@@ -105,8 +105,17 @@ public:
       AD<double> cte1 = vars[mIdx.cte + t];
       AD<double> epsi1 = vars[mIdx.epsi + t];
 
-      AD<double> f0 = mCoeffs[0] + mCoeffs[1] * x0 + mCoeffs[2] * CppAD::pow(x0, 2);
-      AD<double> psides0 = CppAD::atan(mCoeffs[1] + 2.0 * mCoeffs[2] * x0);
+      AD<double> f0(0.0);
+      for (int d = 0; d < mCoeffs.size(); ++d)
+      {
+        f0 += mCoeffs(d) * CppAD::pow(x0, d);
+      }
+      AD<double> psides0(0);
+      for (int d = 0; d < mCoeffs.size(); ++d)
+      {
+        psides0 += d * mCoeffs(d) * CppAD::pow(x0, d - 1);
+      }
+      psides0 = CppAD::atan(psides0);
 
       fg[mIdx.x + t + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * mIdx.deltaT);
       fg[mIdx.y + t + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * mIdx.deltaT);
@@ -239,11 +248,11 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   // can uncomment 1 of these and see if it makes a difference or not but
   // if you uncomment both the computation time should go up in orders of
   // magnitude.
-  //options += "Sparse  true        forward\n";
-  //options += "Sparse  true        reverse\n";
+  options += "Sparse  true        forward\n";
+  options += "Sparse  true        reverse\n";
   // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
   // Change this as you see fit.
-  //options += "Numeric max_cpu_time          0.5\n";
+  options += "Numeric max_cpu_time          0.5\n";
 
   // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
@@ -264,7 +273,7 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
     // Return actuation result
     for(int t = 0; t < mIdx.N; ++t)
     {
-      Eigen::VectorXd actuation(2);
+      Eigen::VectorXd actuation(8);
       actuation << solution.x[mIdx.x + t]
                  , solution.x[mIdx.y + t]
                  , solution.x[mIdx.psi + t]
@@ -273,6 +282,7 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
                  , solution.x[mIdx.epsi + t]
                  , (t < mIdx.N - 1) ? rad2deg(solution.x[mIdx.steer + t]) / 25.0 : 0.0
                  , (t < mIdx.N - 1) ? solution.x[mIdx.throttle + t] : 0.0;
+      actuations.push_back(actuation);
     }
   }
   return solution.status == CppAD::ipopt::solve_result<Dvector>::success;
