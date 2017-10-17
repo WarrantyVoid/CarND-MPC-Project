@@ -9,6 +9,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
 #include "json.hpp"
+#include "tools.h"
 
 // for convenience
 using json = nlohmann::json;
@@ -129,11 +130,10 @@ private:
 
 int main()
 {
-  static const int targetSpeed = 40;
-  static int count = 0;
+  static const int targetSpeed = 100;
   uWS::Hub h;
-  TimeTracker tracker(10);
-  MPCParams params(targetSpeed, 2.67, 10, 4.0 / targetSpeed);
+  TimeTracker tracker(3);
+  MPCParams params(targetSpeed, 2.67, 10, 0.1);
   MPC mpc(params);
 
   h.onMessage([&tracker, &params, &mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
@@ -153,8 +153,6 @@ int main()
         {
           json msgJson;
           tracker.begin();
-          ++count;
-          std::cout << "count=" << count << std::endl;
 
           // Fetch car state from msg
           double x = j[1]["x"];
@@ -163,8 +161,6 @@ int main()
           double v = j[1]["speed"];
           double steer = j[1]["steering_angle"];
           double throttle = j[1]["throttle"];
-          std::cout <<  "x=" << x << " y=" << y << " psi=" << psi
-                    << " v=" << v << " steer=" << steer << " throttle=" << throttle << std::endl;
 
           // Fetch planned path from message
           std::vector<double> px = j[1]["ptsx"];
@@ -174,14 +170,11 @@ int main()
           assert(px.size() == py.size());
           Eigen::VectorXd refXPlanned(px.size());
           Eigen::VectorXd refYPlanned(py.size());
-          std::cout << "ref=";
           for (int i = 0; i < static_cast<int>(px.size()); ++i)
           {
             refXPlanned[i] = cos(-psi) * (px[i] - x) - sin(-psi) * (py[i] - y);
             refYPlanned[i] = sin(-psi) * (px[i] - x) + cos(-psi) * (py[i] - y);
-            std::cout << "(" << refXPlanned[i] << ", " << refYPlanned[i] << ") ";
           }
-          std::cout << std::endl;
 
           // Match 3rd order polynom
           Eigen::VectorXd refCoeffs = polyFit(refXPlanned, refYPlanned, 3);
@@ -197,19 +190,17 @@ int main()
           msgJson["next_x"] = refWaypointsX;
           msgJson["next_y"] = refWaypointsY;
 
-          // Final car state with latency and errors
+          // Create car state with latency and relative errors
           double latency = tracker.getAvgElapsedMs();
-          double dX = v * latency;
           double dPsi = v * -steer / params.Lf * latency;
+          double dX = v * latency;
+          double dY = 0.0;
           double dV = throttle * latency;
-          double cte = -polyEval(refCoeffs, dX);
-          double epsi = -atan(refCoeffs[1]) - dPsi;
-          std::cout <<  "l=" << latency << " dx=" << dX << " dPsi=" << dPsi
-                    << " dV=" << dV << " cte=" << cte << " epsi=" << epsi << std::endl;
-          std::cout << "===================================================================" << std::endl;
+          double cte = polyEval(refCoeffs, dX) - dY;
+          double epsi = dPsi - atan(refCoeffs[1] + 2 * refCoeffs[2] * dX);
           Eigen::VectorXd state(6);
           state << dX
-                 , 0.0
+                 , dY
                  , dPsi
                  , v + dV
                  , cte
@@ -220,7 +211,7 @@ int main()
           if (mpc.Solve(state, refCoeffs, actuations))
           {
             Eigen::VectorXd actuation = actuations.front();
-            msgJson["steering_angle"] = -actuation(6);
+            msgJson["steering_angle"] = -rad2deg(actuation(6)) / 25.0 / params.Lf;
             msgJson["throttle"] = actuation(7);
 
             //Display the MPC predicted trajectory

@@ -2,6 +2,7 @@
 #include <cppad/cppad.hpp>
 #include <cppad/ipopt/solve.hpp>
 #include "Eigen-3.3/Eigen/Core"
+#include "tools.h"
 
 using CppAD::AD;
 
@@ -36,8 +37,8 @@ public:
     // The part of the cost based on the reference state.
     for (int t = 0; t < mP.N; ++t)
     {
-      fg[0] += CppAD::pow(vars[mP.cte + t], 2);
-      fg[0] += CppAD::pow(vars[mP.epsi + t], 2);
+      fg[0] += 2000.0 * CppAD::pow(vars[mP.cte + t], 2);
+      fg[0] += 1000.0 * CppAD::pow(vars[mP.epsi + t], 2);
       fg[0] += CppAD::pow(vars[mP.v + t] - mP.refV, 2);
     }
 
@@ -102,7 +103,6 @@ public:
       fg[mP.v + t + 1] = v1 - (v0 + throttle * mP.deltaT);
       fg[mP.cte + t + 1] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * mP.deltaT));
       fg[mP.epsi + t + 1] = epsi1 - ((psi0 - psides0) + v0 * steer / mP.Lf * mP.deltaT);
-
       //std::cout << "x=" << fg[mP.x + t + 1] << " y=" << fg[mP.y + t + 1] << " psi=" << fg[mP.psi + t + 1]
       //          << " v=" << fg[mP.v + t + 1] << " cte=" << fg[mP.cte + t + 1] << " epsi=" << fg[mP.epsi + t + 1] << std::endl;
     }
@@ -230,10 +230,8 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   // Change this as you see fit.
   options += "Numeric max_cpu_time          0.5\n";
 
-  // place to return solution
+  // Solve the problem
   CppAD::ipopt::solve_result<Dvector> solution;
-
-  // solve the problem
   CppAD::ipopt::solve<Dvector, FGEval>(
         options, vars, varsLowBound, varsUppBound,
         constraintsLowBound, constraintsUppBound,
@@ -256,7 +254,7 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
                  , solution.x[mP.v + t]
                  , solution.x[mP.cte + t]
                  , solution.x[mP.epsi + t]
-                 , (t < mP.N - 1) ? rad2deg(solution.x[mP.steer + t]) / 25.0 : 0.0
+                 , (t < mP.N - 1) ? solution.x[mP.steer + t] : 0.0
                  , (t < mP.N - 1) ? solution.x[mP.throttle + t] : 0.0;
       actuations.push_back(actuation);
     }
