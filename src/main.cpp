@@ -130,10 +130,10 @@ private:
 
 int main()
 {
-  static const int targetSpeed = 100;
+  static const double targetSpeed = 80.0;
   uWS::Hub h;
   TimeTracker tracker(3);
-  MPCParams params(targetSpeed, 2.67, 10, 0.1);
+  MPCParams params(targetSpeed, 2.67, 10.0, 8.0 / (targetSpeed + 4.0));
   MPC mpc(params);
 
   h.onMessage([&tracker, &params, &mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
@@ -192,12 +192,13 @@ int main()
 
           // Create car state with latency and relative errors
           double latency = tracker.getAvgElapsedMs();
-          double dPsi = v * -steer / params.Lf * latency;
-          double dX = v * latency;
-          double dY = 0.0;
+          double yawRate = v * -steer / params.Lf;
+          double dX = Tools::isZero(yawRate) ? v * latency : v / yawRate * sin(yawRate * latency);
+          double dY = Tools::isZero(yawRate) ? 0.0 : v / yawRate * (-cos(yawRate * latency) + 1.0);
+          double dPsi = yawRate * latency;
           double dV = throttle * latency;
           double cte = polyEval(refCoeffs, dX) - dY;
-          double epsi = dPsi - atan(refCoeffs[1] + 2 * refCoeffs[2] * dX);
+          double epsi = Tools::calculateAngleDelta(atan(refCoeffs[1] + 2 * refCoeffs[2] * dX), dPsi);
           Eigen::VectorXd state(6);
           state << dX
                  , dY
@@ -211,7 +212,7 @@ int main()
           if (mpc.Solve(state, refCoeffs, actuations))
           {
             Eigen::VectorXd actuation = actuations.front();
-            msgJson["steering_angle"] = -rad2deg(actuation(6)) / 25.0 / params.Lf;
+            msgJson["steering_angle"] = -Tools::rad2deg(actuation(6)) / 25.0 / params.Lf;
             msgJson["throttle"] = actuation(7);
 
             //Display the MPC predicted trajectory

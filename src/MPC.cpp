@@ -37,23 +37,24 @@ public:
     // The part of the cost based on the reference state.
     for (int t = 0; t < mP.N; ++t)
     {
-      fg[0] += 2000.0 * CppAD::pow(vars[mP.cte + t], 2);
-      fg[0] += 1000.0 * CppAD::pow(vars[mP.epsi + t], 2);
-      fg[0] += CppAD::pow(vars[mP.v + t] - mP.refV, 2);
+      fg[0] += 1.0  * CppAD::abs(vars[mP.v]) * CppAD::pow(vars[mP.cte + t], 2);
+      fg[0] += 1.0  * CppAD::pow(t * vars[mP.epsi + t], 2);
+      fg[0] += 0.01 * CppAD::pow(vars[mP.v + t] - mP.refV, 2);
     }
+
 
     // Minimize the use of actuators.
     for (int t = 0; t < mP.N - 1; ++t)
     {
-      fg[0] += CppAD::pow(vars[mP.steer + t], 2);
-      fg[0] += CppAD::pow(vars[mP.throttle + t], 2);
+      fg[0] += 1.0 * CppAD::pow(vars[mP.steer + t], 2);
+      fg[0] += 0.1 * CppAD::pow(vars[mP.throttle + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 1; t < mP.N - 1; ++t)
     {
-      fg[0] += CppAD::pow(vars[mP.steer + t] - vars[mP.steer + t - 1], 2);
-      fg[0] += CppAD::pow(vars[mP.throttle + t] - vars[mP.throttle + t - 1], 2);
+      fg[0] += 1.0 * CppAD::pow(2 * (vars[mP.steer + t] - vars[mP.steer + t - 1]), 2);
+      fg[0] += 1.0 * CppAD::pow(vars[mP.throttle + t] - vars[mP.throttle + t - 1], 2);
     }
 
     // Initial constraints
@@ -63,8 +64,6 @@ public:
     fg[mP.v + 1] = vars[mP.v];
     fg[mP.cte + 1] = vars[mP.cte];
     fg[mP.epsi + 1] = vars[mP.epsi];
-    //std::cout << "[Init] x=" << fg[mP.x + 1] << " y=" << fg[mP.y + 1] << " psi=" << fg[mP.psi + 1]
-    //          << " v=" << fg[mP.v + 1] << " cte=" << fg[mP.cte + 1] << " epsi=" << fg[mP.epsi + 1] << std::endl;
 
     // The rest of the constraints
     for (int t = 1; t < mP.N; ++t)
@@ -85,11 +84,14 @@ public:
       AD<double> cte1 = vars[mP.cte + t];
       AD<double> epsi1 = vars[mP.epsi + t];
 
+      // Calculate polynomial y at x0
       AD<double> f0(0.0);
       for (int d = 0; d < mCoeffs.size(); ++d)
       {
         f0 += mCoeffs(d) * CppAD::pow(x0, d);
       }
+
+      // Calculate polynomial gradient at x0
       AD<double> psides0(0.0);
       for (int d = 1; d < mCoeffs.size(); ++d)
       {
@@ -97,14 +99,24 @@ public:
       }
       psides0 = CppAD::atan(psides0);
 
-      fg[mP.x + t + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * mP.deltaT);
-      fg[mP.y + t + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * mP.deltaT);
-      fg[mP.psi + t + 1] = psi1 - (psi0 + v0 * steer / mP.Lf * mP.deltaT);
+      // Calculate state difference based on turn rate
+      AD<double> yawRate = v0 * steer / mP.Lf;
+      if (Tools::isZero(yawRate))
+      {
+        // Straight case (taken from unscented Kalman filter)
+        fg[mP.x + t + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * mP.deltaT);
+        fg[mP.y + t + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * mP.deltaT);
+      }
+      else
+      {
+        // Cyclic case (taken from unscented Kalman filter)
+        fg[mP.x + t + 1] = x1 - (x0 + v0 / yawRate * ( CppAD::sin(psi0 + yawRate * mP.deltaT) - CppAD::sin(psi0)));
+        fg[mP.y + t + 1] = y1 - (y0 + v0 / yawRate * (-CppAD::cos(psi0 + yawRate * mP.deltaT) + CppAD::cos(psi0)));
+      }
+      fg[mP.psi + t + 1] = Tools::calculateAngleDelta(psi0 + yawRate * mP.deltaT, psi1);;
       fg[mP.v + t + 1] = v1 - (v0 + throttle * mP.deltaT);
       fg[mP.cte + t + 1] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * mP.deltaT));
-      fg[mP.epsi + t + 1] = epsi1 - ((psi0 - psides0) + v0 * steer / mP.Lf * mP.deltaT);
-      //std::cout << "x=" << fg[mP.x + t + 1] << " y=" << fg[mP.y + t + 1] << " psi=" << fg[mP.psi + t + 1]
-      //          << " v=" << fg[mP.v + t + 1] << " cte=" << fg[mP.cte + t + 1] << " epsi=" << fg[mP.epsi + t + 1] << std::endl;
+      fg[mP.epsi + t + 1] = Tools::calculateAngleDelta((psi0 - psides0) + yawRate * mP.deltaT, epsi1);
     }
   }
 
@@ -181,8 +193,8 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   }
   for (int i = mP.steer; i < mP.throttle; ++i)
   {
-    varsLowBound[i] = deg2rad(-25.0);
-    varsUppBound[i] = deg2rad(25.0);
+    varsLowBound[i] = Tools::deg2rad(-25.0);
+    varsUppBound[i] = Tools::deg2rad(25.0);
   }
   for (int i = mP.throttle; i < nVars; ++i)
   {
@@ -241,8 +253,8 @@ bool MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs, std::vector<Eigen
   if (solution.status == CppAD::ipopt::solve_result<Dvector>::success)
   {
     // Cost
-    auto cost = solution.obj_value;
-    std::cout << "Cost " << cost << std::endl;
+    //auto cost = solution.obj_value;
+    //std::cout << "Cost " << cost << std::endl;
 
     // Set actuation result
     for(int t = 0; t < mP.N; ++t)
