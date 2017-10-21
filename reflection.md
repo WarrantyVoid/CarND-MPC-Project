@@ -160,6 +160,6 @@ With this setup, the car drives safely and smoothly along the course with a spee
 The following video shows one lap:
 
 
-[Vehicle driving one save lap (mcp.ogv)](./img/mcp.ogv)
+[Vehicle driving one save lap (mcp.ogv)](https://github.com/WarrantyVoid/CarND-P10-MPC/blob/master/img/mpc.ogv)
 
 ![Screenshot of video][image3]
