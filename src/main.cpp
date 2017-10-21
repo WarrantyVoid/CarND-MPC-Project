@@ -132,7 +132,7 @@ int main()
 {
   static const double targetSpeed = 80.0;
   uWS::Hub h;
-  TimeTracker tracker(3);
+  TimeTracker tracker(10);
   MPCParams params(targetSpeed, 2.67, 10.0, 8.0 / (targetSpeed + 4.0));
   MPC mpc(params);
 
@@ -197,15 +197,18 @@ int main()
           double dY = Tools::isZero(yawRate) ? 0.0 : v / yawRate * (-cos(yawRate * latency) + 1.0);
           double dPsi = yawRate * latency;
           double dV = throttle * latency;
-          double cte = polyEval(refCoeffs, dX) - dY;
-          double epsi = Tools::calculateAngleDelta(atan(refCoeffs[1] + 2 * refCoeffs[2] * dX), dPsi);
+          double cte = polyEval(refCoeffs, 0.0);
+          double epsi = -atan(refCoeffs[1]);
+          double dCte = v * sin(epsi) * latency;
+          double dEpsi = yawRate * latency;
+
           Eigen::VectorXd state(6);
           state << dX
                  , dY
                  , dPsi
                  , v + dV
-                 , cte
-                 , epsi;
+                 , cte + dCte
+                 , epsi + dEpsi;
 
           // Calculate actuations using mpc
           std::vector<Eigen::VectorXd> actuations;

@@ -42,7 +42,6 @@ public:
       fg[0] += 0.01 * CppAD::pow(vars[mP.v + t] - mP.refV, 2);
     }
 
-
     // Minimize the use of actuators.
     for (int t = 0; t < mP.N - 1; ++t)
     {
@@ -74,6 +73,9 @@ public:
       AD<double> v0 = vars[mP.v + t - 1];
       AD<double> cte0 = vars[mP.cte + t - 1];
       AD<double> epsi0 = vars[mP.epsi + t - 1];
+      AD<double> f0 = polyValue(x0);
+      AD<double> psides0 = polyGradientAngle(x0);
+
       AD<double> steer = vars[mP.steer + t - 1];
       AD<double> throttle = vars[mP.throttle + t - 1];
 
@@ -83,21 +85,6 @@ public:
       AD<double> v1 = vars[mP.v + t];
       AD<double> cte1 = vars[mP.cte + t];
       AD<double> epsi1 = vars[mP.epsi + t];
-
-      // Calculate polynomial y at x0
-      AD<double> f0(0.0);
-      for (int d = 0; d < mCoeffs.size(); ++d)
-      {
-        f0 += mCoeffs(d) * CppAD::pow(x0, d);
-      }
-
-      // Calculate polynomial gradient at x0
-      AD<double> psides0(0.0);
-      for (int d = 1; d < mCoeffs.size(); ++d)
-      {
-        psides0 += d * mCoeffs(d) * CppAD::pow(x0, d - 1);
-      }
-      psides0 = CppAD::atan(psides0);
 
       // Calculate state difference based on turn rate
       AD<double> yawRate = v0 * steer / mP.Lf;
@@ -118,6 +105,35 @@ public:
       fg[mP.cte + t + 1] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * mP.deltaT));
       fg[mP.epsi + t + 1] = Tools::calculateAngleDelta((psi0 - psides0) + yawRate * mP.deltaT, epsi1);
     }
+  }
+
+private:
+  /**
+   * @param x
+   * @return Reference polynomial evaluated at x.
+   */
+  AD<double> polyValue(const AD<double> &x) const
+  {
+    AD<double> result(0.0);
+    for (int d = 0; d < mCoeffs.size(); ++d)
+    {
+      result += mCoeffs(d) * CppAD::pow(x, d);
+    }
+    return result;
+  }
+
+  /**
+   * @param x
+   * @return Gradient angle of reference polynomial at x.
+   */
+  AD<double> polyGradientAngle(const AD<double> &x) const
+  {
+    AD<double> result(0.0);
+    for (int d = 1; d < mCoeffs.size(); ++d)
+    {
+      result += d * mCoeffs(d) * CppAD::pow(x, d - 1);
+    }
+    return CppAD::atan(result);
   }
 
 private:
