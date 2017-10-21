@@ -7,8 +7,8 @@ The goals / steps of this project are the following:
 
 * Your code must compile without errors with cmake and make.
 * Student describes their model in detail. This includes the state, actuators and update equations.
-* Student discusses the reasoning behind the chosen N (timestep length) and dt (elapsed duration between timesteps) values. Additionally the student details the previous values tried.
-* A polynomial is fitted to waypoints.
+* Student discusses the reasoning behind the chosen N (time step length) and dt (elapsed duration between time steps) values. Additionally the student details the previous values tried.
+* A polynomial is fitted to way points.
 * The student implements Model Predictive Control that handles a 100 millisecond latency. Student provides details on how they deal with latency.
 
 [//]: # (Image References)
@@ -152,9 +152,9 @@ Resulting trajectories for same case as above:
 
 We can see that steering and throttle are much more smooth now. If we would have chosen a smaller `dt` for the given velocity now, the vehicle would have smoothly approached the reference path and consistently followed it.
 
-### 3. Provide details on how you've dealed with latency.
+### 3. Provide details on how you've dealt with latency.
 
-I haven taken the hint from the lessons and applied the update equasions once on the initial state before feeding it into the MCP. In this step, the equasion can be simplified quite alot as many factory e.g. cos/sin are either zero or one. As `Dt` I have chosen the latency as projected from the mean of the last 5 algorithm invocations.
+I haven taken the hint from the lessons and applied the update equations once on the initial state before feeding it into the MCP. In this step, the equation can be simplified quite a lot, as many factory as e.g. cos/sin are either zero or one. As `dt` I have chosen the latency as projected from the mean of the last 5 algorithm invocations.
 
 With this setup, the car drives safely and smoothly along the course with a speed between 70 on straight sections and 40 inside curves. The algorithm has potential for higher speeds, but I played it safe.
 The following video shows one lap:
